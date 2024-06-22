@@ -1,0 +1,569 @@
+%option lang = "C++"
+
+%decls %{
+    #include <string>
+    #include <algorithm>
+    #include <stdexcept>
+    #include <cctype>
+    #include <unordered_map> 
+    #include <iostream>
+    #include <typeinfo>
+
+    using stdstring = std::string;
+    using SymbolVector = std::unordered_map<stdstring, stdstring>;
+%}
+
+%{
+	#include "lppAst.hpp"
+
+	int offset = 0;
+    SymbolVector variables;
+    SymbolVector TiposVariables;
+
+	void setOffset(int newOffset)
+	{
+	    offset = newOffset;
+	}
+
+	int getOffset(){
+		return offset;
+	}
+
+	int addOffset()
+	{
+		return offset += 4;
+	}
+
+    void resetOffset() {
+        offset = 0;
+    }
+%}
+
+%node Nodo %abstract %typedef = {
+    %nocreate stdstring place;
+    %nocreate stdstring code;
+}
+
+%node Expr Nodo %abstract
+
+%node Programa Nodo = {
+    StmtBloqueDef *defStmts;
+    Stmt *stmts;
+}
+
+%node ListaDef DefExpr = {
+    ListaDef *varList;
+    VarDef *newVar;
+}
+
+%node VarDef DefExpr = {
+    IdExpr *newVar;
+}
+
+%node BinaryExpr Expr %abstract = {
+    Expr *expr1;
+    Expr *expr2;
+}
+
+%node NumExpr Expr = {
+    int value;
+}
+
+%node IdExpr Expr = {
+    stdstring id;
+}
+
+%node BoolExpr Expr = {
+    int value;
+}
+
+%node CharExpr Expr = {
+    int value;
+}
+
+%node StrExpr Expr = {
+    stdstring value;
+}
+
+%node ExprSuma BinaryExpr
+%node ExprResta BinaryExpr
+%node ExprIgual BinaryExpr
+%node ExprNIgual BinaryExpr
+%node ExprMenor BinaryExpr
+%node ExprMenorI BinaryExpr
+%node ExprMayor BinaryExpr
+%node ExprMayorI BinaryExpr
+
+%node Stmt Nodo %abstract %typedef
+%node DefExpr Expr %abstract %typedef
+
+%node StmtBloque Stmt = {
+    Nodo *stmt1;
+    Nodo *stmt2;
+}
+
+%node StmtBloqueDef Stmt = {
+    StmtBloqueDef *defList;
+    StmtDef *stmt;
+}
+
+%node StmtDef Stmt = {
+    StrExpr *varType;
+    ListaDef *varlist;
+}
+
+%node StmtAsignar Stmt = {
+    IdExpr *varName;
+    Expr *value;
+}
+
+%node StmtImprimirExpr Stmt = {
+    Expr *expr;
+}
+
+%node StmtImprimirChar Stmt = {
+    Expr *expr;
+}
+
+%node StmtImprimirStr Stmt = {
+    Expr *expr;
+}
+
+%node StmtSi Stmt = {
+    Expr *cond;
+    Stmt *stmt1;
+    Stmt *stmt2;
+}
+
+%node StmtSinoSi Stmt = {
+    Expr *cond;
+    Stmt *stmt;
+}
+
+%node StmtPara Stmt = {
+    StmtAsignar *var;
+    Expr *cond;
+    Stmt *block;
+}
+
+%node StmtMientras Stmt = {
+    Expr * cond;
+    Stmt * block;
+}
+
+%operation %virtual stdstring generarCodigo(Nodo *node);
+%operation %virtual stdstring generarCodigoDef(DefExpr *node, stdstring type);
+
+generarCodigo(Programa) {
+    stdstring defStmts = "";
+    if (node->defStmts != nullptr)
+        defStmts = node->defStmts->generarCodigo();
+    node->code = "\n\tsub esp, " + std::to_string(offset) + "\n";
+    resetOffset();
+    
+
+    stdstring stmts = node->stmts->generarCodigo();
+    node->code += "prg:\n\tpush ebp\n\tmov ebp, esp\n\tsub esp, "+std::to_string(offset)+"\n";
+    node->code += "\n" + stmts;
+
+    return node->code;
+}
+
+generarCodigo(ListaDef) {
+    stdstring vList = node->varList->generarCodigo();
+    stdstring nVar = node->newVar->generarCodigo();
+
+    node->code = vList + "\n" + nVar;
+
+    return "";
+}
+
+generarCodigoDef(ListaDef) {
+    stdstring vList = node->varList->generarCodigoDef(type);
+    stdstring nVar = node->newVar->generarCodigoDef(type);
+
+    node->code = vList + "\n" + nVar;
+
+    return node->code;
+}
+
+generarCodigo(VarDef) {
+    variables[node->newVar->id] = "dword [ebp + " + std::to_string(addOffset()) + "]";
+    node->place = variables[node->newVar->id];
+    node->code = "\tpush eax";
+
+    return "";
+}
+
+generarCodigoDef(VarDef) {
+    variables[node->newVar->id] = "dword [ebp + " + std::to_string(addOffset()) + "]";
+    node->place = variables[node->newVar->id];
+    std::transform(type.begin(), type.end(), type.begin(), ::toupper);
+
+    TiposVariables[node->place] = type;
+    node->code = "\tpush eax";
+
+    return node->code;
+}
+
+generarCodigo(NumExpr) {
+    node->place = std::to_string(node->value);
+    return "";
+}
+
+generarCodigo(IdExpr) {
+    node->place = variables[node->id];
+    return "";
+}
+
+generarCodigo(BoolExpr) {
+    node->place = std::to_string(node->value);
+    return "";
+}
+
+generarCodigo(CharExpr) {
+    node->place = std::to_string(node->value);
+    return "";
+}
+
+generarCodigo(StrExpr) {
+    node->place = node->value;
+    return "";
+}
+
+generarCodigo(ExprSuma) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tadd edx, " + node->expr2->place;
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], edx\n";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprResta) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tsub edx, " + node->expr2->place;
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], edx\n";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprMenor) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + node->expr2->place;
+    node->code += "\n\tjl less"+std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp nless"+std::to_string(offset)+"\n\nless"+std::to_string(offset)+":";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nnless"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprMayor) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + node->expr2->place;
+    node->code += "\n\tjg greater" + std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp ngreater"+std::to_string(offset)+"\n\ngreater"+std::to_string(offset)+":";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nngreater"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprMenorI) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + node->expr2->place;
+    node->code += "\n\tjle lesse"+std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp nlesse"+std::to_string(offset)+"\n\nlesse"+std::to_string(offset)+":";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nnlesse"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprMayorI) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + node->expr2->place;
+    node->code += "\n\tjg greatere" + std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp ngreatere"+std::to_string(offset)+"\n\ngreatere"+std::to_string(offset)+":";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nngreatere"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprIgual) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + node->expr2->place;
+    node->code += "\n\tje equal"+std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp nequal"+std::to_string(offset)+"\n\nequal"+std::to_string(offset)+":";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nnequal"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(ExprNIgual) {
+    int offset = addOffset();
+
+    stdstring e1 = node->expr1->generarCodigo();
+    stdstring e2 = node->expr2->generarCodigo();
+
+    node->code = e1 + "\n" + e2;
+
+    node->code += "\n\tmov edx, " + node->expr1->place;
+    node->code += "\n\tcmp edx, " + e2;
+    node->code += "\n\tjne notEqual"+std::to_string(offset);
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 0";
+    node->code += "\n\tjmp equals"+std::to_string(offset)+"\n\nnotEqual:";
+    node->code += "\n\tmov dword [ebp - " + std::to_string(offset) + "], 1\n\nequals"+std::to_string(offset)+":";
+    node->place = "dword [ebp - " + std::to_string(offset) + "]";
+
+    return node->code;
+}
+
+generarCodigo(StmtBloque) {    
+    stdstring s1 = node->stmt1->generarCodigo();
+    stdstring s2 = node->stmt2->generarCodigo();
+
+    node->code = s1 + s2;
+
+    return node->code;
+}
+
+generarCodigo(StmtAsignar) {
+    int pre_offset = offset;
+
+    stdstring expr = node->value->generarCodigo();
+
+    node->code = expr + "\n";
+
+    if (node->value->place.at(0) == 'd') {
+        node->code += "\tmov eax, " + node->value->place + "\n";
+        node->code += "\tmov " + variables[node->varName->id] + ", eax";
+    } else {
+        node->code += "\tmov " + variables[node->varName->id] + ", " + node->value->place;
+    }
+
+    node->place = variables[node->varName->id];
+
+    setOffset(pre_offset);
+    return node->code;
+}
+
+generarCodigo(StmtImprimirExpr) {
+    int offset = addOffset();
+    stdstring s1 = node->expr->generarCodigo();
+
+    node->code = s1 + "\n";
+
+    if (TiposVariables[node->expr->place] == "BOOLEANO") {
+        node->code += "\n\tmov eax, " + node->expr->place;
+        node->code += "\n\tcmp eax, 1";
+        node->code += "\n\tje verdadero" + std::to_string(offset);
+        node->code += "\n#set byte [0x10000000] = [\"Falso\",0]";
+        node->code += "\n\tjmp cprint" + std::to_string(offset);
+        node->code += "\nverdadero" + std::to_string(offset) + ":";
+        node->code += "\n#set byte [0x10000000] = [\"Verdadero\",0]";
+        node->code += "\ncprint" + std::to_string(offset) + ":";
+        node->code += "\n\tmov eax, 4";
+        node->code += "\n\tlea ebx, [0x10000000]";
+        node->code += "\n\tint 0x80";
+    } else if (TiposVariables[node->expr->place] == "CARACTER") {
+        node->code += "\n\tmov eax, 11";
+        node->code += "\n\tmov ebx," + node->expr->place;
+        node->code += "\n\tint 0x80";
+    } else {
+        node->code += "\n\tmov eax, 1";
+        node->code += "\n\tmov ebx, " + node->expr->place;
+        node->code += "\n\tint 0x80";
+    }
+
+    node->code += "\n\tmov eax, 11";
+    node->code += "\n\tmov ebx, 10";
+    node->code += "\n\tint 0x80";
+    
+    return node->code;
+}
+
+generarCodigo(StmtImprimirChar) {
+    stdstring s1 = node->expr->generarCodigo();
+
+    node->code = s1 + "\n"; 
+    
+    node->code += "\n\tmov eax, 11";
+    node->code += "\n\tmov ebx," + node->expr->place;
+    node->code += "\n\tint 0x80";
+
+    node->code += "\n\tmov eax, 11";
+    node->code += "\n\tmov ebx, 10";
+    node->code += "\n\tint 0x80";
+    
+    return node->code;
+}
+
+generarCodigo(StmtImprimirStr) {
+    stdstring s1 = node->expr->generarCodigo();
+
+    node->code = s1 + "\n"; 
+    
+    node->code += "\n#set byte [0x10000000] = [\""+node->expr->place+"\",0]";
+    node->code += "\n\tmov eax, 4";
+    node->code += "\n\tlea ebx, [0x10000000]";
+    node->code += "\n\tint 0x80";
+
+    node->code += "\n\tmov eax, 11";
+    node->code += "\n\tmov ebx, 10";
+    node->code += "\n\tint 0x80";
+    
+
+    return node->code;
+}
+
+generarCodigo(StmtSi) {
+    int offset = addOffset();
+    stdstring cond = node->cond->generarCodigo();
+    stdstring s1 = node->stmt1->generarCodigo();
+    stdstring s2 = "";
+    if (node->stmt2 != nullptr) {
+        s2 = node->stmt2->generarCodigo();
+    }
+
+    node->code = cond + "\n";
+    std::cout << "if no. " << offset << std::endl;
+
+    node->code += "\n\tmov edx, 1";
+    node->code += "\n\tcmp edx, " + node->cond->place;
+    node->code += "\n\tjne false"+std::to_string(offset);
+    node->code += "\n" + s1 + "\n\tjmp endif"+std::to_string(offset);
+    node->code += "\n\nfalse"+std::to_string(offset)+":";
+    node->code += s2 ;
+    node->code += "\n\nendif"+std::to_string(offset)+":";
+
+    return node->code;
+}
+
+generarCodigo(StmtSinoSi) {
+    stdstring cond = node->cond->generarCodigo();
+    stdstring s = node->stmt->generarCodigo();
+
+    node->code = cond + "\n";
+
+    node->code += "\n\tmov edx, 1";
+    node->code += "\n\tcmp edx, " + node->cond->place;
+    node->code += "\n\tjne endelif"+std::to_string(offset);
+    node->code += "\n" + s;
+    node->code += "\n\nendelif"+std::to_string(offset)+":";
+
+    return node->code;
+}
+
+generarCodigo(StmtPara) {
+    int offset = addOffset();
+
+    stdstring assign = node->var->generarCodigo();
+    stdstring cond = node->cond->generarCodigo();
+    stdstring block = node->block->generarCodigo();
+
+    node->code = assign;
+
+    node->code += "\nfor" + std::to_string(offset) + ":";
+    node->code += "\n\tmov edx, " + node->var->place;
+    node->code += "\n\tcmp edx, " + node->cond->place;
+    node->code += "\n\tjg endfor" + std::to_string(offset);
+    node->code += block;
+    node->code += "\n\tadd " + node->var->place + ", 1";
+    node->code +="\n\tjmp for" + std::to_string(offset);
+    node->code += "\nendfor" + std::to_string(offset) + ":";
+
+    return node->code;
+}
+
+generarCodigo(StmtMientras) {
+    int offset = addOffset();
+
+    stdstring cond = node->cond->generarCodigo();
+    stdstring block = node->block->generarCodigo();
+
+    node->code = "\nwhile" + std::to_string(offset) + ":";
+    node->code += cond;
+    node->code += "\n\tmov edx, 1";
+    node->code += "\n\tcmp edx, " + node->cond->place;
+    node->code += "\n\tjne endwhile" + std::to_string(offset);
+    node->code += block + "\n\tjmp while" + std::to_string(offset);
+    node->code += "\nendwhile" + std::to_string(offset) + ":";
+
+    return node->code;
+}
+
+generarCodigo(StmtBloqueDef) {
+    stdstring dList = node->defList->generarCodigo();
+    stdstring stmt = node->stmt->generarCodigo();
+
+    node->code = dList + "\n" + stmt;
+
+    return node->code;
+}
+
+generarCodigo(StmtDef) {
+    stdstring type = node->varType->generarCodigo();
+    stdstring code = node->varlist->generarCodigoDef(node->varType->place);
+    
+    node->code = code;
+    return node->code;
+}

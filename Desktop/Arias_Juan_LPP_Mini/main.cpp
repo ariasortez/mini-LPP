@@ -1,11 +1,11 @@
 #include <iostream>
 #include <fstream>
-#include "ExprLexer.hpp"
-#include "ExprParser.hpp"
+#include "lppLexer.hpp"
+#include "lppParser.hpp"
 
 int main(int argc, char *argv[]) 
 {
-    if (argc != 2) {
+    if (argc != 3) {
         std::cerr << "Not enough CLI arguments\n";
         return 1;
     }
@@ -16,8 +16,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ExprLexer lexer(in);
-    ExprParser parser(lexer);
+    lppLexer lexer(in);
+    lppParser parser(lexer, argv[2]);
 
     try {
         parser.parse();
