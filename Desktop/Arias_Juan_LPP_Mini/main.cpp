@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
 
     try {
         parser.parse();
-        std::cout << "Compilador Correctamente"'\n';
+        std::cout << "Compilado Correctamente"'\n';
         return 0;
     }
     catch (const std::runtime_error& ex) {
