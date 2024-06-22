@@ -32,10 +32,10 @@ void lppParser::generarArchivo(const std::string& code) {
     file.open(asmFile, std::ios::out);
 
     if(!file) {
-        std::cerr << "Error in creating asm file!" << std::endl;
+        std::cerr << "Error al crear el archivo .asm!" << std::endl;
     }
 
-    std::cout << ".asm file created successfully" << std::endl;
+    std::cout << "Archivo .asm creado exitosamente" << std::endl;
 
     file << code;
     file.close();

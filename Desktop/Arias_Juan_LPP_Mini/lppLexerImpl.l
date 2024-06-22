@@ -30,7 +30,7 @@
 "//"[^\n]*\n    { }
 "/*"            { BEGIN(comment); } // Me lleva a la zona de regex de comentario
 \"              { BEGIN(str); }     // Me lleva a la zona de regex de string
-\'[^\n]\'       { return Token::Caracter; }
+\'[^\n]\'       { *lval = new CharExpr(yytext[1]); return Token::Caracter; }
 "Entero"        { *lval = new StrExpr(std::string(yytext)); return Token::DefEntero; }
 "Caracter"      { *lval = new StrExpr(std::string(yytext)); return Token::DefCaracter; }
 "Booleano"      { *lval = new StrExpr(std::string(yytext)); return Token::DefBooleano; }
